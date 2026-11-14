@@ -1,0 +1,31 @@
+name: Transfer NapCat image
+
+on:
+  workflow_dispatch:
+
+permissions:
+  packages: write
+
+jobs:
+  transfer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Download and verify release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --output napcat.tar https://github.com/XingYunStar/NapCatQQ/releases/download/v4.18.42/napcat-docker-v4.18.42-amd64.tar
+          echo '85e3fd02b58fd836a0177734b6ff77a896000bcfcf209b3b200d7e8b8452df7c  napcat.tar' | sha256sum --check
+      - name: Load and publish image
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          source_ref=$(tar -xOf napcat.tar manifest.json | python3 -c 'import json,sys; print(json.load(sys.stdin)[0]["RepoTags"][0])')
+          docker load --input napcat.tar
+          test "$(docker image inspect "$source_ref" --format '{{.Architecture}}')" = amd64
+          echo "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          docker tag "$source_ref" ghcr.io/timez250/napcat-archive:v4.18.42
+          docker push ghcr.io/timez250/napcat-archive:v4.18.42
